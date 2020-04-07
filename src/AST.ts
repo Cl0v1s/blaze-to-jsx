@@ -4,32 +4,29 @@ import traverse from "@babel/traverse";
 import { NodePath } from '@babel/traverse';
 
 
-interface EventBind {
-  selector: string, 
-  event: string,
-  fun: Babel.FunctionDeclaration
-}
+import {EventBind, Component, StateDefinition } from './Component';
 
 export default class AST {
   
   tree: Babel.File;
 
-  imports: Babel.ImportDeclaration[] = [];
-  funcs: Babel.FunctionDeclaration[] = [];
-
-  constructr: Babel.FunctionDeclaration | null = null;
-  didMount: Babel.FunctionDeclaration | null = null;
-  willUnmount: Babel.FunctionDeclaration | null = null;
-
-  helpers: Babel.FunctionDeclaration[] = [];
-  events: EventBind[] = [];
-
-  props: string[] = [];
-  state: string[] = [];
+  component: Component;
 
   static NODE_COUNTER = 0;
 
   constructor(code: string) {
+    this.component = {
+      imports: [],
+      funcs: [],
+      constructr: null,
+      willUnmount: null,
+      didMount: null,
+      state: [],
+      props: [],
+      helpers: [],
+      events: [],
+    };
+
     this.tree = Parser.parse(code, {
       sourceType: 'module',
     });
@@ -41,6 +38,10 @@ export default class AST {
     this.processEvents();
     this.processProps();
     this.processState();
+  }
+
+  public getComponent() {
+    return this.component;
   }
 
   private getNodeName() {
@@ -81,11 +82,16 @@ export default class AST {
         // nom du state
         if(Babel.isIdentifier(subject.property) == false) return;
         const state = (<Babel.Identifier>subject.property).name;
-        this.state.push(state);
+        const args = (<Babel.NewExpression>expr.right).arguments;
+        const def = args.length > 0 ? args[0] : undefined;
+        if(this.component.state.findIndex(s => s.name === state) !== -1) return;
+        this.component.state.push({
+          name: state, 
+          defaultValue: <any>def,
+        });
       }
     });
-    this.state = Array.from(new Set(this.state));
-    console.log(JSON.stringify(this.state, null, 2));
+    //console.log(JSON.stringify(this.component.state, null, 2));
   }
 
   processProps() {
@@ -112,10 +118,10 @@ export default class AST {
         if((Babel.isIdentifier(subject.property) && (<Babel.Identifier>subject.property).name === "data") == false) return;
         if(Babel.isIdentifier(member.property) == false) return;
         const prop = (<Babel.Identifier>member.property).name;
-        this.props.push(prop);
+        this.component.props.push(prop);
       }
     });
-    this.props = Array.from(new Set(this.props));
+    this.component.props = Array.from(new Set(this.component.props));
     //console.log(JSON.stringify(this.props, null, 2));
   }
 
@@ -124,7 +130,7 @@ export default class AST {
       ImportDeclaration: (p) => {
         const path: NodePath<Babel.ImportDeclaration> = p;
         const imp: Babel.ImportDeclaration = path.node;
-        this.imports.push(imp);
+        this.component.imports.push(imp);
       },
     });
   }
@@ -139,16 +145,16 @@ export default class AST {
         if(Babel.isMemberExpression(expr.expression.callee.object) == false) return;
         if(Babel.isIdentifier(expr.expression.callee.property) == false) return;
         const cycle: Babel.Identifier = expr.expression.callee.property;
-        if(cycle.name == "onCreated") this.constructr = expr.expression.arguments[0];
-        else if(cycle.name == "onRendered") this.didMount = expr.expression.arguments[0];
-        else if(cycle.name == "onDestroyed") this.willUnmount = expr.expression.arguments[0];
+        if(cycle.name == "onCreated") this.component.constructr = expr.expression.arguments[0];
+        else if(cycle.name == "onRendered") this.component.didMount = expr.expression.arguments[0];
+        else if(cycle.name == "onDestroyed") this.component.willUnmount = expr.expression.arguments[0];
       }
     });
     //console.log(JSON.stringify(this.constructr, null, 2));
   }
 
   processHelpers() {
-    this.processTemplateProperty('helpers', this.helpers);
+    this.processTemplateProperty('helpers', this.component.helpers);
     //console.log(JSON.stringify(array[0], null, 2));
 
   }
@@ -163,7 +169,7 @@ export default class AST {
       event = 'on' + event.replace(/(?:^|\s)\S/g, function(a) { return a.toUpperCase(); });
       data.splice(0, 1);
       let selector = data.join(' ');
-      this.events.push({
+      this.component.events.push({
         event,
         selector,
         fun: fns[i],
@@ -220,33 +226,6 @@ export default class AST {
     });
   }
 
-  private sanitizeFunction(path: NodePath<any>, fun: Babel.FunctionDeclaration) {
-    // Suppression de templateInstance dans la déclaration
-    fun.params = fun.params.filter((e: Babel.Node) => (Babel.isIdentifier(e) == false || (<Babel.Identifier>e).name !== "templateInstance"));
-
-    traverse(fun, {
-      // Remplacement de templateInstance par this dans le corps
-      Identifier: (p) => {
-        const path: NodePath<Babel.Identifier> = p;
-        const id: Babel.Identifier = path.node;
-        if(id.name === "templateInstance") path.node = <any>Babel.thisExpression();
-      },
-      // Remplacement de Template.instance() par this dans le corps
-      CallExpression: (p) => {
-        const path: NodePath<Babel.CallExpression> = p;
-        const cll: Babel.CallExpression = path.node;
-        if(Babel.isMemberExpression(cll.callee)) {
-          const member = <Babel.MemberExpression>cll.callee;
-          if(Babel.isIdentifier(member.object) && (<Babel.Identifier>member.object).name == "Template") {
-            if(Babel.isIdentifier(member.property) && (<Babel.Identifier>member.property).name == "instance") {
-              (<Babel.Identifier>(<any>path.node)) = Babel.identifier("this");
-            }
-          }
-        }
-      }
-    }, path.scope, path.state, path.parentPath)
-  }
-
   processFunctions() {
     traverse(this.tree, {
       FunctionDeclaration: (p) => {
@@ -255,7 +234,7 @@ export default class AST {
 
         // Si c'est une fonction utilitaire
         if(Babel.isProgram(path.parent)) {
-          this.funcs.push(fun);     
+          this.component.funcs.push(fun);     
         }
       }
     });

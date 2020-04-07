@@ -5,15 +5,17 @@ var Babel = require("@babel/types");
 var traverse_1 = require("@babel/traverse");
 var AST = /** @class */ (function () {
     function AST(code) {
-        this.imports = [];
-        this.funcs = [];
-        this.constructr = null;
-        this.didMount = null;
-        this.willUnmount = null;
-        this.helpers = [];
-        this.events = [];
-        this.props = [];
-        this.state = [];
+        this.component = {
+            imports: [],
+            funcs: [],
+            constructr: null,
+            willUnmount: null,
+            didMount: null,
+            state: [],
+            props: [],
+            helpers: [],
+            events: [],
+        };
         this.tree = Parser.parse(code, {
             sourceType: 'module',
         });
@@ -25,6 +27,9 @@ var AST = /** @class */ (function () {
         this.processProps();
         this.processState();
     }
+    AST.prototype.getComponent = function () {
+        return this.component;
+    };
     AST.prototype.getNodeName = function () {
         AST.NODE_COUNTER++;
         return AST.NODE_COUNTER.toString();
@@ -55,11 +60,17 @@ var AST = /** @class */ (function () {
                 if (Babel.isIdentifier(subject.property) == false)
                     return;
                 var state = subject.property.name;
-                _this.state.push(state);
+                var args = expr.right.arguments;
+                var def = args.length > 0 ? args[0] : undefined;
+                if (_this.component.state.findIndex(function (s) { return s.name === state; }) !== -1)
+                    return;
+                _this.component.state.push({
+                    name: state,
+                    defaultValue: def,
+                });
             }
         });
-        this.state = Array.from(new Set(this.state));
-        console.log(JSON.stringify(this.state, null, 2));
+        //console.log(JSON.stringify(this.component.state, null, 2));
     };
     AST.prototype.processProps = function () {
         var _this = this;
@@ -83,10 +94,10 @@ var AST = /** @class */ (function () {
                 if (Babel.isIdentifier(member.property) == false)
                     return;
                 var prop = member.property.name;
-                _this.props.push(prop);
+                _this.component.props.push(prop);
             }
         });
-        this.props = Array.from(new Set(this.props));
+        this.component.props = Array.from(new Set(this.component.props));
         //console.log(JSON.stringify(this.props, null, 2));
     };
     AST.prototype.processImports = function () {
@@ -95,7 +106,7 @@ var AST = /** @class */ (function () {
             ImportDeclaration: function (p) {
                 var path = p;
                 var imp = path.node;
-                _this.imports.push(imp);
+                _this.component.imports.push(imp);
             },
         });
     };
@@ -115,17 +126,17 @@ var AST = /** @class */ (function () {
                     return;
                 var cycle = expr.expression.callee.property;
                 if (cycle.name == "onCreated")
-                    _this.constructr = expr.expression.arguments[0];
+                    _this.component.constructr = expr.expression.arguments[0];
                 else if (cycle.name == "onRendered")
-                    _this.didMount = expr.expression.arguments[0];
+                    _this.component.didMount = expr.expression.arguments[0];
                 else if (cycle.name == "onDestroyed")
-                    _this.willUnmount = expr.expression.arguments[0];
+                    _this.component.willUnmount = expr.expression.arguments[0];
             }
         });
         //console.log(JSON.stringify(this.constructr, null, 2));
     };
     AST.prototype.processHelpers = function () {
-        this.processTemplateProperty('helpers', this.helpers);
+        this.processTemplateProperty('helpers', this.component.helpers);
         //console.log(JSON.stringify(array[0], null, 2));
     };
     AST.prototype.processEvents = function () {
@@ -138,7 +149,7 @@ var AST = /** @class */ (function () {
             event_1 = 'on' + event_1.replace(/(?:^|\s)\S/g, function (a) { return a.toUpperCase(); });
             data.splice(0, 1);
             var selector = data.join(' ');
-            this.events.push({
+            this.component.events.push({
                 event: event_1,
                 selector: selector,
                 fun: fns[i],
@@ -195,32 +206,6 @@ var AST = /** @class */ (function () {
             }
         });
     };
-    AST.prototype.sanitizeFunction = function (path, fun) {
-        // Suppression de templateInstance dans la déclaration
-        fun.params = fun.params.filter(function (e) { return (Babel.isIdentifier(e) == false || e.name !== "templateInstance"); });
-        traverse_1.default(fun, {
-            // Remplacement de templateInstance par this dans le corps
-            Identifier: function (p) {
-                var path = p;
-                var id = path.node;
-                if (id.name === "templateInstance")
-                    path.node = Babel.thisExpression();
-            },
-            // Remplacement de Template.instance() par this dans le corps
-            CallExpression: function (p) {
-                var path = p;
-                var cll = path.node;
-                if (Babel.isMemberExpression(cll.callee)) {
-                    var member = cll.callee;
-                    if (Babel.isIdentifier(member.object) && member.object.name == "Template") {
-                        if (Babel.isIdentifier(member.property) && member.property.name == "instance") {
-                            path.node = Babel.identifier("this");
-                        }
-                    }
-                }
-            }
-        }, path.scope, path.state, path.parentPath);
-    };
     AST.prototype.processFunctions = function () {
         var _this = this;
         traverse_1.default(this.tree, {
@@ -229,7 +214,7 @@ var AST = /** @class */ (function () {
                 var fun = path.node;
                 // Si c'est une fonction utilitaire
                 if (Babel.isProgram(path.parent)) {
-                    _this.funcs.push(fun);
+                    _this.component.funcs.push(fun);
                 }
             }
         });
