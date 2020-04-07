@@ -17,6 +17,8 @@ var Converter = /** @class */ (function () {
         this.createWillUnmount();
         this.createHelpers();
         this.createEvents();
+        this.createFunctions();
+        this.clean();
         this.generate();
     }
     Converter.prototype.generate = function () {
@@ -29,6 +31,14 @@ var Converter = /** @class */ (function () {
                 if (_this.classDec !== null)
                     return;
                 _this.classDec = p.node;
+            }
+        });
+    };
+    Converter.prototype.clean = function () {
+        var _this = this;
+        traverse_1.default(this.baseTree, {
+            ClassMethod: function (p) {
+                _this.sanitizeFunction(p, p.node);
             }
         });
     };
@@ -51,19 +61,28 @@ var Converter = /** @class */ (function () {
             _this.classDec.body.body.push(ctr);
         });
     };
+    Converter.prototype.createFunctions = function () {
+        var _this = this;
+        this.component.funcs.forEach(function (fun) {
+            if (fun.id == null || _this.classDec == null)
+                return;
+            var ctr = Babel.classMethod("method", fun.id, fun.params, fun.body, false, false, fun.generator, fun.async);
+            _this.classDec.body.body.push(ctr);
+        });
+    };
     Converter.prototype.createConstructor = function () {
         if (this.classDec == null)
             return;
         var ctr = null;
         if (this.component.constructr !== null) {
             // Création de la méthode
-            ctr = Babel.classMethod("constructor", Babel.identifier("constructor"), this.component.constructr.params, this.component.constructr.body);
+            ctr = Babel.classMethod("constructor", Babel.identifier("constructor"), [Babel.identifier("props")], this.component.constructr.body);
         }
         else {
-            ctr = Babel.classMethod("constructor", Babel.identifier("constructor"), [], Babel.blockStatement([]));
+            ctr = Babel.classMethod("constructor", Babel.identifier("constructor"), [Babel.identifier("props")], Babel.blockStatement([]));
         }
         // Ajout super() on doit tricher 
-        var sup = Babel.expressionStatement(Babel.callExpression(Babel.identifier('super'), []));
+        var sup = Babel.expressionStatement(Babel.callExpression(Babel.identifier('super'), [Babel.identifier('props')]));
         ctr.body.body.splice(0, 0, sup);
         // Définition du state
         if (this.component.state.length > 0) {
@@ -127,13 +146,15 @@ var Converter = /** @class */ (function () {
     Converter.prototype.sanitizeFunction = function (path, fun) {
         // Suppression de templateInstance dans la déclaration
         fun.params = fun.params.filter(function (e) { return (Babel.isIdentifier(e) == false || e.name !== "templateInstance"); });
+        // Passage à this
         traverse_1.default(fun, {
             // Remplacement de templateInstance par this dans le corps
             Identifier: function (p) {
                 var path = p;
                 var id = path.node;
-                if (id.name === "templateInstance")
-                    path.node = Babel.thisExpression();
+                if (id.name === "templateInstance") {
+                    path.replaceWith(Babel.thisExpression());
+                }
             },
             // Remplacement de Template.instance() par this dans le corps
             CallExpression: function (p) {
@@ -143,12 +164,31 @@ var Converter = /** @class */ (function () {
                     var member = cll.callee;
                     if (Babel.isIdentifier(member.object) && member.object.name == "Template") {
                         if (Babel.isIdentifier(member.property) && member.property.name == "instance") {
-                            path.node = Babel.identifier("this");
+                            path.replaceWith(Babel.thisExpression());
                         }
                     }
                 }
             }
         }, path.scope, path.state, path.parentPath);
+        // Passage à props
+        traverse_1.default(this.baseTree, {
+            MemberExpression: function (p) {
+                var path = p;
+                var member = path.node;
+                if (Babel.isMemberExpression(member.object) == false)
+                    return;
+                var subject = member.object;
+                // Template.instance(), templateInstance ou this
+                if (Babel.isThisExpression(subject.object) == false)
+                    return;
+                // .data
+                if ((Babel.isIdentifier(subject.property) && subject.property.name === "data") == false)
+                    return;
+                if (Babel.isIdentifier(member.property) == false)
+                    return;
+                subject.property.name = "props";
+            }
+        });
     };
     return Converter;
 }());

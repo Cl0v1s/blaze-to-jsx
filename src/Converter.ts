@@ -25,6 +25,9 @@ export default class Converter {
 
     this.createHelpers();
     this.createEvents();
+    this.createFunctions();
+
+    this.clean();
 
     this.generate();
   }
@@ -38,6 +41,14 @@ export default class Converter {
       ClassDeclaration: (p) => {
         if(this.classDec !== null) return;
         this.classDec = p.node;
+      }
+    })
+  }
+
+  clean() {
+    traverse(this.baseTree, {
+      ClassMethod: (p) => {
+        this.sanitizeFunction(p, p.node);
       }
     })
   }
@@ -77,6 +88,23 @@ export default class Converter {
     });
   }
 
+  createFunctions() {
+    this.component.funcs.forEach((fun) => {
+      if(fun.id == null || this.classDec == null) return;
+      let ctr = Babel.classMethod(
+        "method",
+        fun.id,
+        fun.params,
+        fun.body,
+        false,
+        false,
+        fun.generator,
+        fun.async
+      );
+      this.classDec.body.body.push(ctr);
+    });
+  }
+
   createConstructor() {
     if(this.classDec == null) return;
     let ctr: Babel.ClassMethod | null = null;
@@ -85,20 +113,20 @@ export default class Converter {
       ctr = Babel.classMethod(
         "constructor",
         Babel.identifier("constructor"),
-        this.component.constructr.params,
+        [Babel.identifier("props")],
         this.component.constructr.body,
       );
     } else {
       ctr = Babel.classMethod(
         "constructor",
         Babel.identifier("constructor"),
-        [],
+        [Babel.identifier("props")],
         Babel.blockStatement([]),
       );
     }
 
     // Ajout super() on doit tricher 
-    let sup = Babel.expressionStatement(Babel.callExpression(Babel.identifier('super'), []));
+    let sup = Babel.expressionStatement(Babel.callExpression(Babel.identifier('super'), [Babel.identifier('props')]));
     ctr.body.body.splice(0, 0, sup);
 
     // Définition du state
@@ -168,16 +196,19 @@ export default class Converter {
     this.classDec.body.body.push(mt);
   }
 
-  private sanitizeFunction(path: NodePath<any>, fun: Babel.FunctionDeclaration) {
+  private sanitizeFunction(path: NodePath<any>, fun: Babel.Function) {
     // Suppression de templateInstance dans la déclaration
     fun.params = fun.params.filter((e: Babel.Node) => (Babel.isIdentifier(e) == false || (<Babel.Identifier>e).name !== "templateInstance"));
 
+    // Passage à this
     traverse(fun, {
       // Remplacement de templateInstance par this dans le corps
       Identifier: (p) => {
         const path: NodePath<Babel.Identifier> = p;
         const id: Babel.Identifier = path.node;
-        if(id.name === "templateInstance") path.node = <any>Babel.thisExpression();
+        if(id.name === "templateInstance") {
+          path.replaceWith(<any>Babel.thisExpression());
+        }
       },
       // Remplacement de Template.instance() par this dans le corps
       CallExpression: (p) => {
@@ -187,11 +218,28 @@ export default class Converter {
           const member = <Babel.MemberExpression>cll.callee;
           if(Babel.isIdentifier(member.object) && (<Babel.Identifier>member.object).name == "Template") {
             if(Babel.isIdentifier(member.property) && (<Babel.Identifier>member.property).name == "instance") {
-              (<Babel.Identifier>(<any>path.node)) = Babel.identifier("this");
+              path.replaceWith(Babel.thisExpression());
             }
           }
         }
       }
-    }, path.scope, path.state, path.parentPath)
+    }, path.scope, path.state, path.parentPath);
+
+    // Passage à props
+    traverse(this.baseTree, {
+      MemberExpression: (p) => {
+        const path: NodePath<Babel.MemberExpression> = p;
+        const member: Babel.MemberExpression = path.node;
+        if(Babel.isMemberExpression(member.object) == false) return;
+        const subject : Babel.MemberExpression = <any>member.object;
+
+        // Template.instance(), templateInstance ou this
+        if(Babel.isThisExpression(subject.object) == false) return;
+        // .data
+        if((Babel.isIdentifier(subject.property) && (<Babel.Identifier>subject.property).name === "data") == false) return;
+        if(Babel.isIdentifier(member.property) == false) return;
+        (<Babel.Identifier>subject.property).name = "props";
+      }
+    });
   }
 }
