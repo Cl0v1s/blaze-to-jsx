@@ -5,13 +5,15 @@ import traverse from "@babel/traverse";
 import { NodePath } from '@babel/traverse';
 import generate from '@babel/generator';
 
+import { compile } from './../../spacebars-to-jsx'
+
 export default class Converter {
 
   baseTree: Babel.File;
   component: Component;
   classDec: Babel.ClassDeclaration | null = null;
 
-  constructor(baseContent: string, component: Component) {
+  constructor(baseContent: string, component: Component, template: string) {
     this.baseTree = Parser.parse(baseContent, {
       sourceType: 'module',
     });
@@ -29,11 +31,13 @@ export default class Converter {
 
     this.clean();
 
+    //this.createRender(template);
+
     this.generate();
   }
 
   generate() {
-    console.log(generate(this.baseTree, {}, undefined));
+    console.log(generate(this.baseTree, {}, undefined).code);
   }
 
   private findClassDeclaration() {
@@ -43,6 +47,20 @@ export default class Converter {
         this.classDec = p.node;
       }
     })
+  }
+
+  createRender(template: string) {
+    if(this.classDec == null) return;
+    const jsx: Babel.Program = <any>compile(template, {isJSX: true});
+    const mt = Babel.classMethod(
+      "method",
+      Babel.identifier("render"),
+      [],
+      Babel.blockStatement([
+        Babel.returnStatement((<Babel.ExpressionStatement>jsx.body[0]).expression)
+      ])
+    );
+    this.classDec.body.body.push(mt);
   }
 
   clean() {
@@ -125,18 +143,22 @@ export default class Converter {
       );
     }
 
-    // Ajout super() on doit tricher 
+    // Ajout super
     let sup = Babel.expressionStatement(Babel.callExpression(Babel.identifier('super'), [Babel.identifier('props')]));
     ctr.body.body.splice(0, 0, sup);
 
     // Définition du state
     if(this.component.state.length > 0) {
-      let state: any = {};
-      this.component.state.forEach((s) => {
-        state[s.name] = s.defaultValue === undefined ? null : s.defaultValue;
-      });
-      state = Babel.expressionStatement(Parser.parseExpression(`this.state = ${JSON.stringify(state)}`));
-      ctr.body.body.push(state);
+      const expr = Babel.expressionStatement(
+        Babel.assignmentExpression(
+          "=", 
+          Babel.memberExpression(Babel.thisExpression(), Babel.identifier('state')),
+          Babel.objectExpression(
+            this.component.state.map(state => Babel.objectProperty(Babel.identifier(state.name), state.defaultValue || Babel.nullLiteral()))
+          )
+        )
+      );
+      ctr.body.body.push(expr);
     }
 
     // bind des helpers 
@@ -230,11 +252,17 @@ export default class Converter {
       MemberExpression: (p) => {
         const path: NodePath<Babel.MemberExpression> = p;
         const member: Babel.MemberExpression = path.node;
-        if(Babel.isMemberExpression(member.object) == false) return;
-        const subject : Babel.MemberExpression = <any>member.object;
+        let subject = null;
+        if(Babel.isMemberExpression(member.object)) {
+          subject = <any>member.object;
 
-        // Template.instance(), templateInstance ou this
-        if(Babel.isThisExpression(subject.object) == false) return;
+          // Template.instance(), templateInstance ou this
+          if(Babel.isThisExpression(subject.object) == false) return;       
+        } else if (Babel.isThisExpression(member.object)) {
+          subject = member;
+        } else {
+          return;
+        }
         // .data
         if((Babel.isIdentifier(subject.property) && (<Babel.Identifier>subject.property).name === "data") == false) return;
         if(Babel.isIdentifier(member.property) == false) return;
@@ -276,5 +304,17 @@ export default class Converter {
         }
       }
     });
+
+    // Suppression des assignements ReactiveVar
+    traverse(this.baseTree, {
+      Identifier: (p) => {
+        const path: NodePath<Babel.Identifier> = p;
+        const id: Babel.Identifier = path.node;
+        if(id.name !== "ReactiveVar" && id.name !== "ReactiveDict") return;
+        const cll = path.findParent(path => path.node.type == "AssignmentExpression");
+        if(cll == null) return;
+        cll.remove();
+      }
+    })
   }
 }

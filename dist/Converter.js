@@ -4,8 +4,9 @@ var Babel = require("@babel/types");
 var Parser = require("@babel/parser");
 var traverse_1 = require("@babel/traverse");
 var generator_1 = require("@babel/generator");
+var spacebars_to_jsx_1 = require("./../../spacebars-to-jsx");
 var Converter = /** @class */ (function () {
-    function Converter(baseContent, component) {
+    function Converter(baseContent, component, template) {
         this.classDec = null;
         this.baseTree = Parser.parse(baseContent, {
             sourceType: 'module',
@@ -19,10 +20,11 @@ var Converter = /** @class */ (function () {
         this.createEvents();
         this.createFunctions();
         this.clean();
+        //this.createRender(template);
         this.generate();
     }
     Converter.prototype.generate = function () {
-        console.log(generator_1.default(this.baseTree, {}, undefined));
+        console.log(generator_1.default(this.baseTree, {}, undefined).code);
     };
     Converter.prototype.findClassDeclaration = function () {
         var _this = this;
@@ -33,6 +35,15 @@ var Converter = /** @class */ (function () {
                 _this.classDec = p.node;
             }
         });
+    };
+    Converter.prototype.createRender = function (template) {
+        if (this.classDec == null)
+            return;
+        var jsx = spacebars_to_jsx_1.compile(template, { isJSX: true });
+        var mt = Babel.classMethod("method", Babel.identifier("render"), [], Babel.blockStatement([
+            Babel.returnStatement(jsx.body[0].expression)
+        ]));
+        this.classDec.body.body.push(mt);
     };
     Converter.prototype.clean = function () {
         var _this = this;
@@ -81,17 +92,13 @@ var Converter = /** @class */ (function () {
         else {
             ctr = Babel.classMethod("constructor", Babel.identifier("constructor"), [Babel.identifier("props")], Babel.blockStatement([]));
         }
-        // Ajout super() on doit tricher 
+        // Ajout super
         var sup = Babel.expressionStatement(Babel.callExpression(Babel.identifier('super'), [Babel.identifier('props')]));
         ctr.body.body.splice(0, 0, sup);
         // Définition du state
         if (this.component.state.length > 0) {
-            var state_1 = {};
-            this.component.state.forEach(function (s) {
-                state_1[s.name] = s.defaultValue === undefined ? null : s.defaultValue;
-            });
-            state_1 = Babel.expressionStatement(Parser.parseExpression("this.state = " + JSON.stringify(state_1)));
-            ctr.body.body.push(state_1);
+            var expr = Babel.expressionStatement(Babel.assignmentExpression("=", Babel.memberExpression(Babel.thisExpression(), Babel.identifier('state')), Babel.objectExpression(this.component.state.map(function (state) { return Babel.objectProperty(Babel.identifier(state.name), state.defaultValue || Babel.nullLiteral()); }))));
+            ctr.body.body.push(expr);
         }
         // bind des helpers 
         if (this.component.helpers.length > 0) {
@@ -176,12 +183,19 @@ var Converter = /** @class */ (function () {
             MemberExpression: function (p) {
                 var path = p;
                 var member = path.node;
-                if (Babel.isMemberExpression(member.object) == false)
+                var subject = null;
+                if (Babel.isMemberExpression(member.object)) {
+                    subject = member.object;
+                    // Template.instance(), templateInstance ou this
+                    if (Babel.isThisExpression(subject.object) == false)
+                        return;
+                }
+                else if (Babel.isThisExpression(member.object)) {
+                    subject = member;
+                }
+                else {
                     return;
-                var subject = member.object;
-                // Template.instance(), templateInstance ou this
-                if (Babel.isThisExpression(subject.object) == false)
-                    return;
+                }
                 // .data
                 if ((Babel.isIdentifier(subject.property) && subject.property.name === "data") == false)
                     return;
@@ -217,6 +231,19 @@ var Converter = /** @class */ (function () {
                     var sta = Parser.parseExpression("this.state." + id.name);
                     cll.replaceWith(sta);
                 }
+            }
+        });
+        // Suppression des assignements ReactiveVar
+        traverse_1.default(this.baseTree, {
+            Identifier: function (p) {
+                var path = p;
+                var id = path.node;
+                if (id.name !== "ReactiveVar" && id.name !== "ReactiveDict")
+                    return;
+                var cll = path.findParent(function (path) { return path.node.type == "AssignmentExpression"; });
+                if (cll == null)
+                    return;
+                cll.remove();
             }
         });
     };
