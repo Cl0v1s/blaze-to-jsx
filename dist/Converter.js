@@ -15,6 +15,8 @@ var Converter = /** @class */ (function () {
         this.createConstructor();
         this.createDidMount();
         this.createWillUnmount();
+        this.createHelpers();
+        this.createEvents();
         this.generate();
     }
     Converter.prototype.generate = function () {
@@ -30,6 +32,25 @@ var Converter = /** @class */ (function () {
             }
         });
     };
+    Converter.prototype.createHelpers = function () {
+        var _this = this;
+        this.component.helpers.forEach(function (helper) {
+            if (helper.id == null || _this.classDec == null)
+                return;
+            var ctr = Babel.classMethod("method", helper.id, helper.params, helper.body, false, false, helper.generator, helper.async);
+            _this.classDec.body.body.push(ctr);
+        });
+    };
+    Converter.prototype.createEvents = function () {
+        var _this = this;
+        this.component.events.forEach(function (event) {
+            if (event.fun.id == null || _this.classDec == null)
+                return;
+            var ctr = Babel.classMethod("method", event.fun.id, event.fun.params, event.fun.body, false, false, event.fun.generator, event.fun.async);
+            Babel.addComment(ctr, "leading", "event: " + event.event + " " + event.selector);
+            _this.classDec.body.body.push(ctr);
+        });
+    };
     Converter.prototype.createConstructor = function () {
         if (this.classDec == null)
             return;
@@ -41,14 +62,53 @@ var Converter = /** @class */ (function () {
         else {
             ctr = Babel.classMethod("constructor", Babel.identifier("constructor"), [], Babel.blockStatement([]));
         }
+        // Ajout super() on doit tricher 
+        var sup = Babel.expressionStatement(Babel.callExpression(Babel.identifier('super'), []));
+        ctr.body.body.splice(0, 0, sup);
         // Définition du state
         if (this.component.state.length > 0) {
             var state_1 = {};
             this.component.state.forEach(function (s) {
                 state_1[s.name] = s.defaultValue === undefined ? null : s.defaultValue;
             });
-            state_1 = Parser.parseExpression("this.state = " + JSON.stringify(state_1));
+            state_1 = Babel.expressionStatement(Parser.parseExpression("this.state = " + JSON.stringify(state_1)));
             ctr.body.body.push(state_1);
+        }
+        // bind des helpers 
+        if (this.component.helpers.length > 0) {
+            this.component.helpers.forEach(function (helper) {
+                if (helper.id == null)
+                    return;
+                var expr = null;
+                expr = ("this." + helper.id.name + " = this." + helper.id.name + ".bind(this)");
+                expr = Babel.expressionStatement(Parser.parseExpression(expr));
+                if (ctr != null)
+                    ctr.body.body.push(expr);
+            });
+        }
+        // bind des events 
+        if (this.component.events.length > 0) {
+            this.component.events.forEach(function (event) {
+                if (event.fun.id == null)
+                    return;
+                var expr = null;
+                expr = ("this." + event.fun.id.name + " = this." + event.fun.id.name + ".bind(this)");
+                expr = Babel.expressionStatement(Parser.parseExpression(expr));
+                if (ctr != null)
+                    ctr.body.body.push(expr);
+            });
+        }
+        // bind des funcs 
+        if (this.component.funcs.length > 0) {
+            this.component.funcs.forEach(function (fun) {
+                if (fun.id == null)
+                    return;
+                var expr = null;
+                expr = ("this." + fun.id.name + " = this." + fun.id.name + ".bind(this)");
+                expr = Babel.expressionStatement(Parser.parseExpression(expr));
+                if (ctr != null)
+                    ctr.body.body.push(expr);
+            });
         }
         this.classDec.body.body.push(ctr);
     };

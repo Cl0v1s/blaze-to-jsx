@@ -23,6 +23,9 @@ export default class Converter {
     this.createDidMount();
     this.createWillUnmount();
 
+    this.createHelpers();
+    this.createEvents();
+
     this.generate();
   }
 
@@ -37,6 +40,41 @@ export default class Converter {
         this.classDec = p.node;
       }
     })
+  }
+
+  createHelpers() {
+    this.component.helpers.forEach((helper) => {
+      if(helper.id == null || this.classDec == null) return;
+      let ctr = Babel.classMethod(
+        "method",
+        helper.id,
+        helper.params,
+        helper.body,
+        false,
+        false,
+        helper.generator,
+        helper.async
+      );
+      this.classDec.body.body.push(ctr);
+    });
+  }
+
+  createEvents() {
+    this.component.events.forEach((event) => {
+      if(event.fun.id == null || this.classDec == null) return;
+      let ctr = Babel.classMethod(
+        "method",
+        event.fun.id,
+        event.fun.params,
+        event.fun.body,
+        false,
+        false,
+        event.fun.generator,
+        event.fun.async
+      );
+      Babel.addComment(ctr, "leading", `event: ${event.event} ${event.selector}`);
+      this.classDec.body.body.push(ctr);
+    });
   }
 
   createConstructor() {
@@ -59,16 +97,52 @@ export default class Converter {
       );
     }
 
+    // Ajout super() on doit tricher 
+    let sup = Babel.expressionStatement(Babel.callExpression(Babel.identifier('super'), []));
+    ctr.body.body.splice(0, 0, sup);
+
     // Définition du state
     if(this.component.state.length > 0) {
       let state: any = {};
       this.component.state.forEach((s) => {
         state[s.name] = s.defaultValue === undefined ? null : s.defaultValue;
       });
-      state = Parser.parseExpression(`this.state = ${JSON.stringify(state)}`);
+      state = Babel.expressionStatement(Parser.parseExpression(`this.state = ${JSON.stringify(state)}`));
       ctr.body.body.push(state);
     }
 
+    // bind des helpers 
+    if(this.component.helpers.length > 0) {
+      this.component.helpers.forEach((helper) => {
+        if(helper.id == null) return;
+        let expr: any = null;
+        expr = (`this.${helper.id.name} = this.${helper.id.name}.bind(this)`);
+        expr = Babel.expressionStatement(Parser.parseExpression(expr));
+        if(ctr != null) ctr.body.body.push(expr);
+      });
+    }
+
+    // bind des events 
+    if(this.component.events.length > 0) {
+      this.component.events.forEach((event) => {
+        if(event.fun.id == null) return;
+        let expr: any = null;
+        expr = (`this.${event.fun.id.name} = this.${event.fun.id.name}.bind(this)`);
+        expr = Babel.expressionStatement(Parser.parseExpression(expr));
+        if(ctr != null) ctr.body.body.push(expr);
+      });
+    }
+
+    // bind des funcs 
+    if(this.component.funcs.length > 0) {
+      this.component.funcs.forEach((fun) => {
+        if(fun.id == null) return;
+        let expr: any = null;
+        expr = (`this.${fun.id.name} = this.${fun.id.name}.bind(this)`);
+        expr = Babel.expressionStatement(Parser.parseExpression(expr));
+        if(ctr != null) ctr.body.body.push(expr);
+      });
+    }
     this.classDec.body.body.push(ctr);
   }
 
@@ -93,8 +167,6 @@ export default class Converter {
     );
     this.classDec.body.body.push(mt);
   }
-
-
 
   private sanitizeFunction(path: NodePath<any>, fun: Babel.FunctionDeclaration) {
     // Suppression de templateInstance dans la déclaration
