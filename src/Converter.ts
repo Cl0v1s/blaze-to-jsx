@@ -241,5 +241,40 @@ export default class Converter {
         (<Babel.Identifier>subject.property).name = "props";
       }
     });
+
+    // Passage à setState 
+    traverse(this.baseTree, {
+      Identifier: (p) => {
+        const path: NodePath<Babel.Identifier> = p;
+        const id: Babel.Identifier = path.node;
+        if(this.component.state.findIndex(s => s.name === id.name) === -1) return;
+        const cll = path.findParent(path => path.node.type == "CallExpression");
+        if(cll == null) return;
+        const nd: Babel.CallExpression = <any>cll.node;
+        if(Babel.isMemberExpression(nd.callee) == false) return;
+        if(Babel.isIdentifier((<Babel.MemberExpression>nd.callee).property) == false) return;
+        if((<Babel.Identifier>(<any>nd.callee).property).name === "set") {
+          const sta = Babel.expressionStatement(
+            Babel.callExpression(
+              Babel.memberExpression(Babel.thisExpression(), Babel.identifier('setState')),
+              [
+                Babel.objectExpression(
+                  [
+                    Babel.objectProperty(
+                      id,
+                      nd.arguments.length > 0 ? <any>nd.arguments[0] : Babel.nullLiteral()
+                    )
+                  ]
+                )
+              ]
+            )
+          );
+          cll.replaceWith(sta);
+        } else if((<Babel.Identifier>(<any>nd.callee).property).name === "get") {
+          const sta = Parser.parseExpression(`this.state.${id.name}`);
+          cll.replaceWith(sta);
+        }
+      }
+    });
   }
 }

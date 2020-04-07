@@ -144,6 +144,7 @@ var Converter = /** @class */ (function () {
         this.classDec.body.body.push(mt);
     };
     Converter.prototype.sanitizeFunction = function (path, fun) {
+        var _this = this;
         // Suppression de templateInstance dans la déclaration
         fun.params = fun.params.filter(function (e) { return (Babel.isIdentifier(e) == false || e.name !== "templateInstance"); });
         // Passage à this
@@ -187,6 +188,35 @@ var Converter = /** @class */ (function () {
                 if (Babel.isIdentifier(member.property) == false)
                     return;
                 subject.property.name = "props";
+            }
+        });
+        // Passage à setState 
+        traverse_1.default(this.baseTree, {
+            Identifier: function (p) {
+                var path = p;
+                var id = path.node;
+                if (_this.component.state.findIndex(function (s) { return s.name === id.name; }) === -1)
+                    return;
+                var cll = path.findParent(function (path) { return path.node.type == "CallExpression"; });
+                if (cll == null)
+                    return;
+                var nd = cll.node;
+                if (Babel.isMemberExpression(nd.callee) == false)
+                    return;
+                if (Babel.isIdentifier(nd.callee.property) == false)
+                    return;
+                if (nd.callee.property.name === "set") {
+                    var sta = Babel.expressionStatement(Babel.callExpression(Babel.memberExpression(Babel.thisExpression(), Babel.identifier('setState')), [
+                        Babel.objectExpression([
+                            Babel.objectProperty(id, nd.arguments.length > 0 ? nd.arguments[0] : Babel.nullLiteral())
+                        ])
+                    ]));
+                    cll.replaceWith(sta);
+                }
+                else if (nd.callee.property.name === "get") {
+                    var sta = Parser.parseExpression("this.state." + id.name);
+                    cll.replaceWith(sta);
+                }
             }
         });
     };
