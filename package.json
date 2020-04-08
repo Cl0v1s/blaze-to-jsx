@@ -31,6 +31,7 @@
     "@babel/generator": "^7.9.4",
     "@babel/parser": "^7.9.4",
     "@babel/traverse": "^7.9.0",
-    "@types/babel__traverse": "^7.0.10"
+    "@types/babel__traverse": "^7.0.10",
+    "scalpel": "^3.0.0"
   }
 }

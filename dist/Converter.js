@@ -5,6 +5,7 @@ var Parser = require("@babel/parser");
 var traverse_1 = require("@babel/traverse");
 var generator_1 = require("@babel/generator");
 var spacebars_to_jsx_1 = require("./../../spacebars-to-jsx");
+var Selector_1 = require("./Selector");
 var Converter = /** @class */ (function () {
     function Converter(baseContent, component, template, globalIdentifiers) {
         if (globalIdentifiers === void 0) { globalIdentifiers = []; }
@@ -95,11 +96,21 @@ var Converter = /** @class */ (function () {
             }
         });
     };
+    Converter.prototype.bindEvents = function (jsx) {
+        this.component.events.forEach(function (event) {
+            var selector = new Selector_1.default(event.selector, Babel.file(jsx, [], []));
+            var results = selector.search();
+            results.forEach(function (result) {
+                result.openingElement.attributes.push(Babel.jsxAttribute(Babel.jsxIdentifier(event.event), Babel.jsxExpressionContainer(Babel.memberExpression(Babel.thisExpression(), Babel.identifier(event.fun.id.name)))));
+            });
+        });
+    };
     Converter.prototype.createRender = function (template) {
         if (this.classDec == null)
             return;
         var jsx = spacebars_to_jsx_1.compile(template, { isJSX: true });
         this.replaceIdentifiers(jsx);
+        this.bindEvents(jsx);
         var mt = Babel.classMethod("method", Babel.identifier("render"), [], Babel.blockStatement([
             Babel.returnStatement(jsx.body[0].expression)
         ]));

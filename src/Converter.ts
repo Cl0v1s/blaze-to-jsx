@@ -6,6 +6,7 @@ import { NodePath } from '@babel/traverse';
 import generate from '@babel/generator';
 
 import { compile } from './../../spacebars-to-jsx'
+import Selector from './Selector';
 
 export default class Converter {
 
@@ -125,10 +126,31 @@ export default class Converter {
     })
   }
 
+  bindEvents(jsx: Babel.Program) {
+    this.component.events.forEach((event) => {
+      const selector = new Selector(event.selector, Babel.file(jsx, [], []));
+      const results: Babel.JSXElement[] = selector.search();
+      results.forEach((result) => {
+        result.openingElement.attributes.push(
+          Babel.jsxAttribute(
+            Babel.jsxIdentifier(event.event),
+            Babel.jsxExpressionContainer(
+              Babel.memberExpression(
+                Babel.thisExpression(),
+                Babel.identifier((<Babel.Identifier>event.fun.id).name)
+              )
+            )
+          )
+        );
+      });
+    });
+  }
+
   createRender(template: string) {
     if(this.classDec == null) return;
     const jsx: Babel.Program = <any>compile(template, {isJSX: true});
     this.replaceIdentifiers(jsx);
+    this.bindEvents(jsx);
     const mt = Babel.classMethod(
       "method",
       Babel.identifier("render"),
