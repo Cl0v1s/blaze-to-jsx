@@ -22,8 +22,8 @@ export default class Converter {
     });
     this.component = component;
 
+    this.createImports();
     this.findClassDeclaration();
-
     this.createConstructor();
     this.createDidMount();
     this.createWillUnmount();
@@ -76,7 +76,8 @@ export default class Converter {
         const id: Babel.Identifier = path.node;
         if(this.isAFunction(id) == false) {
           if(this.globalIdentifiers.indexOf(id.name) !== -1) return;
-          props.push(path);
+          if(this.isAProp(id)) props.push(path); 
+          else console.warn("Ambiguous identifier in JSX: "+id.name);
         } else {
           if(path.parent.type !== "CallExpression") return;
           //console.log(path.findParent(e => e.type == "MemberExpression"));
@@ -126,6 +127,18 @@ export default class Converter {
     })
   }
 
+  createImports() {
+    this.component.imports.forEach((imp: Babel.ImportDeclaration) => {
+      // import local
+      if(imp.source.value.indexOf('.') !== -1)
+      {
+        Babel.addComment(this.baseTree.program, "leading", ` originally imports ${imp.source.value} `);
+      } else {
+        this.baseTree.program.body.splice(0, 0, imp);
+      }
+    });
+  }
+
   bindEvents(jsx: Babel.Program) {
     this.component.events.forEach((event) => {
       const selector = new Selector(event.selector, Babel.file(jsx, [], []));
@@ -146,11 +159,38 @@ export default class Converter {
     });
   }
 
+  createName(_jsx: Babel.Program) {
+    const jsx: Babel.File = Babel.file(_jsx, [], []);
+    traverse(jsx, {
+      JSXOpeningElement: (p) => {
+        if(this.classDec == null) return;
+        const element = p.node;
+        if(Babel.isJSXIdentifier(element.name) == false || (<Babel.JSXIdentifier>element.name).name !== "template") return;
+        let attr: any = <any>element.attributes.filter((_at) => {
+          if(Babel.isJSXAttribute(_at) == false) return false;
+          const at: Babel.JSXAttribute = <any>_at;
+          if(Babel.isJSXIdentifier(at.name) == false || (<Babel.JSXIdentifier>at.name).name !== "name") return false;
+          return true;
+        });
+        if(attr.length <= 0) return;
+        attr = attr[0];
+        let name = attr.value.value;
+        name = name.replace(/(?:^|\s)\S/g, function(a: string) { return a.toUpperCase(); });
+        this.classDec.id = Babel.identifier(
+          name
+        )
+        element.name = Babel.jsxIdentifier('div');
+        (<Babel.JSXClosingElement>(<Babel.JSXElement>p.parentPath.node).closingElement).name = Babel.jsxIdentifier('div');
+      }
+    });
+  }
+
   createRender(template: string) {
     if(this.classDec == null) return;
     const jsx: Babel.Program = <any>compile(template, {isJSX: true});
     this.replaceIdentifiers(jsx);
     this.bindEvents(jsx);
+    this.createName(jsx);
     const mt = Babel.classMethod(
       "method",
       Babel.identifier("render"),
@@ -316,6 +356,7 @@ export default class Converter {
     );
     this.classDec.body.body.push(mt);
   }
+
 
   private sanitizeFunction(path: NodePath<any>, fun: Babel.Function) {
     // Suppression de templateInstance dans la déclaration

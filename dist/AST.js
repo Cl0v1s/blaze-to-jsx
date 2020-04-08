@@ -6,6 +6,7 @@ var traverse_1 = require("@babel/traverse");
 var AST = /** @class */ (function () {
     function AST(code) {
         this.component = {
+            name: null,
             imports: [],
             funcs: [],
             constructr: null,

@@ -12,6 +12,7 @@ export interface StateDefinition {
 }
 
 export interface Component {
+  name: string | null
   imports: Babel.ImportDeclaration[]
   funcs: Babel.FunctionDeclaration[]
 

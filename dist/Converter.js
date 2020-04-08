@@ -16,6 +16,7 @@ var Converter = /** @class */ (function () {
             sourceType: 'module',
         });
         this.component = component;
+        this.createImports();
         this.findClassDeclaration();
         this.createConstructor();
         this.createDidMount();
@@ -68,7 +69,10 @@ var Converter = /** @class */ (function () {
                 if (_this.isAFunction(id) == false) {
                     if (_this.globalIdentifiers.indexOf(id.name) !== -1)
                         return;
-                    props.push(path);
+                    if (_this.isAProp(id))
+                        props.push(path);
+                    else
+                        console.warn("Ambiguous identifier in JSX: " + id.name);
                 }
                 else {
                     if (path.parent.type !== "CallExpression")
@@ -96,6 +100,18 @@ var Converter = /** @class */ (function () {
             }
         });
     };
+    Converter.prototype.createImports = function () {
+        var _this = this;
+        this.component.imports.forEach(function (imp) {
+            // import local
+            if (imp.source.value.indexOf('.') !== -1) {
+                Babel.addComment(_this.baseTree.program, "leading", " originally imports " + imp.source.value + " ");
+            }
+            else {
+                _this.baseTree.program.body.splice(0, 0, imp);
+            }
+        });
+    };
     Converter.prototype.bindEvents = function (jsx) {
         this.component.events.forEach(function (event) {
             var selector = new Selector_1.default(event.selector, Babel.file(jsx, [], []));
@@ -105,12 +121,42 @@ var Converter = /** @class */ (function () {
             });
         });
     };
+    Converter.prototype.createName = function (_jsx) {
+        var _this = this;
+        var jsx = Babel.file(_jsx, [], []);
+        traverse_1.default(jsx, {
+            JSXOpeningElement: function (p) {
+                if (_this.classDec == null)
+                    return;
+                var element = p.node;
+                if (Babel.isJSXIdentifier(element.name) == false || element.name.name !== "template")
+                    return;
+                var attr = element.attributes.filter(function (_at) {
+                    if (Babel.isJSXAttribute(_at) == false)
+                        return false;
+                    var at = _at;
+                    if (Babel.isJSXIdentifier(at.name) == false || at.name.name !== "name")
+                        return false;
+                    return true;
+                });
+                if (attr.length <= 0)
+                    return;
+                attr = attr[0];
+                var name = attr.value.value;
+                name = name.replace(/(?:^|\s)\S/g, function (a) { return a.toUpperCase(); });
+                _this.classDec.id = Babel.identifier(name);
+                element.name = Babel.jsxIdentifier('div');
+                p.parentPath.node.closingElement.name = Babel.jsxIdentifier('div');
+            }
+        });
+    };
     Converter.prototype.createRender = function (template) {
         if (this.classDec == null)
             return;
         var jsx = spacebars_to_jsx_1.compile(template, { isJSX: true });
         this.replaceIdentifiers(jsx);
         this.bindEvents(jsx);
+        this.createName(jsx);
         var mt = Babel.classMethod("method", Babel.identifier("render"), [], Babel.blockStatement([
             Babel.returnStatement(jsx.body[0].expression)
         ]));

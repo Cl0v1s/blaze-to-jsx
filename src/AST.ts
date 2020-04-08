@@ -16,6 +16,7 @@ export default class AST {
 
   constructor(code: string) {
     this.component = {
+      name: null,
       imports: [],
       funcs: [],
       constructr: null,
