@@ -12,8 +12,10 @@ export default class Converter {
   baseTree: Babel.File;
   component: Component;
   classDec: Babel.ClassDeclaration | null = null;
+  globalIdentifiers: string[] = []
 
-  constructor(baseContent: string, component: Component, template: string) {
+  constructor(baseContent: string, component: Component, template: string, globalIdentifiers = []) {
+    this.globalIdentifiers = globalIdentifiers;
     this.baseTree = Parser.parse(baseContent, {
       sourceType: 'module',
     });
@@ -31,7 +33,7 @@ export default class Converter {
 
     this.clean();
 
-    //this.createRender(template);
+    this.createRender(template);
 
     this.generate();
   }
@@ -49,9 +51,84 @@ export default class Converter {
     })
   }
 
+  private isAFunction(id: Babel.Identifier): boolean {
+    const name = id.name;
+    if(this.component.helpers.findIndex(f => f.id != null && f.id.name === name ) !== -1) return true;
+    if(this.component.events.findIndex(e => e.fun.id != null && e.fun.id.name === name ) !== -1) return true;
+    if(this.component.funcs.findIndex(fun => fun.id != null && fun.id.name === name ) !== -1) return true;
+    return false;
+  }
+
+  private isAProp(id: Babel.Identifier): boolean {
+    const name = id.name;
+    if(this.component.props.findIndex(p => p === name) !== -1) return true;
+    return false;
+  }
+
+  private replaceIdentifiers(_jsx: Babel.Program) {
+    const jsx: Babel.File = Babel.file(_jsx, [], []);
+    const functions: NodePath<Babel.Identifier>[] = [];
+    const props: NodePath<Babel.Identifier>[] = [];
+    traverse(jsx, {
+      Identifier: (p) => {
+        const path: NodePath<Babel.Identifier> = p;
+        const id: Babel.Identifier = path.node;
+        if(this.isAFunction(id) == false) {
+          if(this.globalIdentifiers.indexOf(id.name) !== -1) return;
+          props.push(path);
+        } else {
+          if(path.parent.type !== "CallExpression") return;
+          //console.log(path.findParent(e => e.type == "MemberExpression"));
+          functions.push(path);
+        }
+      }
+    });
+    // Gestion des props
+    props.forEach(path => {
+      // Gestion des cas ou on aurait une fonction d'un objet (array par ex) qui porterait le même nom qu'une prop
+      if(Babel.isMemberExpression(path.parent) && (<Babel.MemberExpression>path.parent).property == path.node) return;
+      path.replaceWith(
+        Babel.memberExpression(
+          Babel.memberExpression(
+            Babel.thisExpression(),
+            Babel.identifier("props"),
+          ),
+          path.node
+        )
+      )
+    });
+
+    // Gestion des fonctions
+    functions.forEach(path => {
+      const parent: Babel.CallExpression = <any>path.parent;
+      if(parent.callee !== path.node) {
+        path.replaceWith(
+          Babel.callExpression(
+            Babel.memberExpression(
+              Babel.thisExpression(),
+              path.node
+            ),
+            []
+          )
+        )
+      } else {
+        path.parentPath.replaceWith(
+          Babel.callExpression(
+            Babel.memberExpression(
+              Babel.thisExpression(),
+              path.node,
+            ),
+            parent.arguments
+          )
+        )
+      }
+    })
+  }
+
   createRender(template: string) {
     if(this.classDec == null) return;
     const jsx: Babel.Program = <any>compile(template, {isJSX: true});
+    this.replaceIdentifiers(jsx);
     const mt = Babel.classMethod(
       "method",
       Babel.identifier("render"),

@@ -6,8 +6,11 @@ var traverse_1 = require("@babel/traverse");
 var generator_1 = require("@babel/generator");
 var spacebars_to_jsx_1 = require("./../../spacebars-to-jsx");
 var Converter = /** @class */ (function () {
-    function Converter(baseContent, component, template) {
+    function Converter(baseContent, component, template, globalIdentifiers) {
+        if (globalIdentifiers === void 0) { globalIdentifiers = []; }
         this.classDec = null;
+        this.globalIdentifiers = [];
+        this.globalIdentifiers = globalIdentifiers;
         this.baseTree = Parser.parse(baseContent, {
             sourceType: 'module',
         });
@@ -20,7 +23,7 @@ var Converter = /** @class */ (function () {
         this.createEvents();
         this.createFunctions();
         this.clean();
-        //this.createRender(template);
+        this.createRender(template);
         this.generate();
     }
     Converter.prototype.generate = function () {
@@ -36,10 +39,67 @@ var Converter = /** @class */ (function () {
             }
         });
     };
+    Converter.prototype.isAFunction = function (id) {
+        var name = id.name;
+        if (this.component.helpers.findIndex(function (f) { return f.id != null && f.id.name === name; }) !== -1)
+            return true;
+        if (this.component.events.findIndex(function (e) { return e.fun.id != null && e.fun.id.name === name; }) !== -1)
+            return true;
+        if (this.component.funcs.findIndex(function (fun) { return fun.id != null && fun.id.name === name; }) !== -1)
+            return true;
+        return false;
+    };
+    Converter.prototype.isAProp = function (id) {
+        var name = id.name;
+        if (this.component.props.findIndex(function (p) { return p === name; }) !== -1)
+            return true;
+        return false;
+    };
+    Converter.prototype.replaceIdentifiers = function (_jsx) {
+        var _this = this;
+        var jsx = Babel.file(_jsx, [], []);
+        var functions = [];
+        var props = [];
+        traverse_1.default(jsx, {
+            Identifier: function (p) {
+                var path = p;
+                var id = path.node;
+                if (_this.isAFunction(id) == false) {
+                    if (_this.globalIdentifiers.indexOf(id.name) !== -1)
+                        return;
+                    props.push(path);
+                }
+                else {
+                    if (path.parent.type !== "CallExpression")
+                        return;
+                    //console.log(path.findParent(e => e.type == "MemberExpression"));
+                    functions.push(path);
+                }
+            }
+        });
+        // Gestion des props
+        props.forEach(function (path) {
+            // Gestion des cas ou on aurait une fonction d'un objet (array par ex) qui porterait le même nom qu'une prop
+            if (Babel.isMemberExpression(path.parent) && path.parent.property == path.node)
+                return;
+            path.replaceWith(Babel.memberExpression(Babel.memberExpression(Babel.thisExpression(), Babel.identifier("props")), path.node));
+        });
+        // Gestion des fonctions
+        functions.forEach(function (path) {
+            var parent = path.parent;
+            if (parent.callee !== path.node) {
+                path.replaceWith(Babel.callExpression(Babel.memberExpression(Babel.thisExpression(), path.node), []));
+            }
+            else {
+                path.parentPath.replaceWith(Babel.callExpression(Babel.memberExpression(Babel.thisExpression(), path.node), parent.arguments));
+            }
+        });
+    };
     Converter.prototype.createRender = function (template) {
         if (this.classDec == null)
             return;
         var jsx = spacebars_to_jsx_1.compile(template, { isJSX: true });
+        this.replaceIdentifiers(jsx);
         var mt = Babel.classMethod("method", Babel.identifier("render"), [], Babel.blockStatement([
             Babel.returnStatement(jsx.body[0].expression)
         ]));
