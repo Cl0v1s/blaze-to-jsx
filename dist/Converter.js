@@ -119,9 +119,14 @@ var Converter = /** @class */ (function () {
         });
     };
     Converter.prototype.bindEvents = function (jsx) {
+        var _this = this;
         this.component.events.forEach(function (event) {
             var selector = new Selector_1.default(event.selector, Babel.file(jsx, [], []));
             var results = selector.search();
+            if (results.length <= 0) {
+                console.warn("Event Target not found: " + event.selector);
+                Babel.addComment(_this.baseTree.program, "leading", " Event Target not found: " + event.event + ":" + event.selector + " ");
+            }
             results.forEach(function (result) {
                 result.openingElement.attributes.push(Babel.jsxAttribute(Babel.jsxIdentifier(event.event), Babel.jsxExpressionContainer(Babel.memberExpression(Babel.thisExpression(), Babel.identifier(event.fun.id.name)))));
             });

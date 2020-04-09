@@ -45,14 +45,18 @@ export default class Selector {
                 && (<Babel.JSXIdentifier>c.name).name === "className";
               });
               if(clss == null || clss.value == null) return false;
-              let literals: Babel.StringLiteral[] = [];
-              traverse(<Babel.Node>clss.value, {
-                StringLiteral: (p) => {
-                  if(Babel.isNullLiteral(p.node)) return;
-                  literals.push(p.node)
-                },
-              }, path.scope, path.state);
-              literals = literals.filter(l => l.value.indexOf(selector.name) !== -1);
+              let literals: Babel.Literal[] = [];
+              if(Babel.isLiteral(clss.value) && Babel.isNullLiteral(clss.value) == false) {
+                literals.push(clss.value);
+              } else {
+                traverse(<Babel.Node>clss.value, {
+                  Literal: (p) => {
+                    if(Babel.isNullLiteral(p.node)) return;
+                    literals.push(p.node)
+                  },
+                }, path.scope, path.state);
+              }
+              literals = literals.filter(l => (<any>l).value.toString().indexOf(selector.name) !== -1);
               return literals.length > 0;
             }
             case 'idSelector': {
@@ -62,15 +66,62 @@ export default class Selector {
                 && (<Babel.JSXIdentifier>c.name).name === "id";
               });
               if(clss == null || clss.value == null) return false;
-              let literals: Babel.StringLiteral[] = [];
-              traverse(<Babel.Node>clss.value, {
-                StringLiteral: (p) => {
-                  if(Babel.isNullLiteral(p.node)) return;
-                  literals.push(p.node)
-                },
-              }, path.scope, path.state);
-              literals = literals.filter(l => l.value.indexOf(selector.name) !== -1);
+              let literals: Babel.Literal[] = [];
+              if(Babel.isLiteral(clss.value) && Babel.isNullLiteral(clss.value) == false) {
+                literals.push(clss.value);
+              } else {
+                traverse(<Babel.Node>clss.value, {
+                  Literal: (p) => {
+                    if(Babel.isNullLiteral(p.node)) return;
+                    literals.push(p.node)
+                  },
+                }, path.scope, path.state);
+              }
+              literals = literals.filter(l => (<any>l).value.toString().indexOf(selector.name) !== -1);
               return literals.length > 0;
+            }
+            case "attributeValueSelector": {
+              //console.warn("Usage of attributeValueSelector: this selector is usually useful at runtime. Please check the Event Binders are correctly created on "+JSON.stringify(this.selector));
+              const attr: Babel.JSXAttribute = <any>element.openingElement.attributes.find((c: Babel.JSXAttribute | Babel.JSXSpreadAttribute) => {
+                return Babel.isJSXAttribute(c)
+                && Babel.isJSXIdentifier(c.name) 
+                && (<Babel.JSXIdentifier>c.name).name === selector.name;
+              });
+              if(attr == null) return false;
+              let literals: Babel.Literal[] = [];
+              if(Babel.isLiteral(attr.value) && Babel.isNullLiteral(attr.value) == false) {
+                literals.push(attr.value);
+              } else {
+                traverse(<Babel.Node>attr.value, {
+                  Literal: (p) => {
+                    if(Babel.isNullLiteral(p.node)) return;
+                    literals.push(p.node)
+                  },
+                }, path.scope, path.state);
+              }
+              const value = literals.map(l => (<any>l).value.toString()).join(' ').trim();
+              switch(selector.operator) {
+                case "=": {
+                  return value === selector.value;
+                }
+                case "~=": // Pas exactement ça mais ça devrait suffire dans notre cas
+                case "*=": {
+                  return value.indexOf(selector.value) !== -1;
+                }
+                case "$=": {
+                  return value.endsWith(selector.value);
+                }
+                case "^=": {
+                  return value.startsWith(selector.value);
+                }
+                case "|=": {
+                  return value === selector.value || value.startsWith(selector.value+'-');
+                }
+                default: {
+                  throw new Error(`Unknow attributeValueSelector operator `+JSON.stringify(selector));
+                }
+              }
+              break;
             }
             default: {
               throw new Error(`Unknow selector `+JSON.stringify(selector));

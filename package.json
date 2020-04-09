@@ -1,6 +1,6 @@
 {
   "name": "@synapse-medicine/blaze-to-jsx",
-  "version": "0.0.3",
+  "version": "0.0.7",
   "description": "",
   "main": "dist/index.js",
   "scripts": {

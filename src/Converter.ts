@@ -150,6 +150,10 @@ export default class Converter {
     this.component.events.forEach((event) => {
       const selector = new Selector(event.selector, Babel.file(jsx, [], []));
       const results: Babel.JSXElement[] = selector.search();
+      if(results.length <= 0) {
+        console.warn("Event Target not found: "+event.selector);
+        Babel.addComment(this.baseTree.program, "leading", " Event Target not found: "+event.event+":"+event.selector+" ");
+      }
       results.forEach((result) => {
         result.openingElement.attributes.push(
           Babel.jsxAttribute(
