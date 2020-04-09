@@ -6,11 +6,14 @@ var traverse_1 = require("@babel/traverse");
 var generator_1 = require("@babel/generator");
 var Selector_1 = require("./Selector");
 var Converter = /** @class */ (function () {
-    function Converter(baseContent, component, template, globalIdentifiers) {
+    function Converter(baseContent, component, template, globalIdentifiers, disambiguiationDict) {
         if (globalIdentifiers === void 0) { globalIdentifiers = []; }
+        if (disambiguiationDict === void 0) { disambiguiationDict = []; }
         this.classDec = null;
         this.globalIdentifiers = [];
+        this.disambiguiationDict = [];
         this.globalIdentifiers = globalIdentifiers;
+        this.disambiguiationDict = disambiguiationDict;
         this.baseTree = Parser.parse(baseContent, {
             sourceType: 'module',
         });
@@ -53,6 +56,9 @@ var Converter = /** @class */ (function () {
     Converter.prototype.isAProp = function (id) {
         var name = id.name;
         if (this.component.props.findIndex(function (p) { return p === name; }) !== -1)
+            return true;
+        // Si n'est pas connu comme prop on cherche dans le dico de désambiguation
+        if (this.disambiguiationDict.findIndex(function (p) { return p == name; }) !== -1)
             return true;
         return false;
     };

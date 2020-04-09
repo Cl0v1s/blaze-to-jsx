@@ -1,5 +1,5 @@
 {
-  "name": "blaze-ast",
+  "name": "blaze-to-jsx",
   "version": "1.0.0",
   "description": "",
   "main": "dist/index.js",
@@ -31,7 +31,9 @@
     "@babel/generator": "^7.9.4",
     "@babel/parser": "^7.9.4",
     "@babel/traverse": "^7.9.0",
+    "@glimmer/syntax": "file:../glimmer-vm/dist/@glimmer/syntax",
     "@types/babel__traverse": "^7.0.10",
-    "scalpel": "^3.0.0"
+    "scalpel": "^3.0.0",
+    "spacebars-to-jsx": "file:../spacebars-to-jsx"
   }
 }

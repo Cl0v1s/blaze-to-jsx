@@ -5,7 +5,7 @@ import traverse from "@babel/traverse";
 import { NodePath } from '@babel/traverse';
 import generate from '@babel/generator';
 
-import { compile } from './../../spacebars-to-jsx'
+import { compile } from 'spacebars-to-jsx'
 import Selector from './Selector';
 
 export default class Converter {
@@ -14,9 +14,11 @@ export default class Converter {
   component: Component;
   classDec: Babel.ClassDeclaration | null = null;
   globalIdentifiers: string[] = []
+  disambiguiationDict: string[] = []
 
-  constructor(baseContent: string, component: Component, template: Babel.Program, globalIdentifiers = []) {
+  constructor(baseContent: string, component: Component, template: Babel.Program, globalIdentifiers = [], disambiguiationDict = []) {
     this.globalIdentifiers = globalIdentifiers;
+    this.disambiguiationDict = disambiguiationDict;
     this.baseTree = Parser.parse(baseContent, {
       sourceType: 'module',
     });
@@ -64,6 +66,8 @@ export default class Converter {
   private isAProp(id: Babel.Identifier): boolean {
     const name = id.name;
     if(this.component.props.findIndex(p => p === name) !== -1) return true;
+    // Si n'est pas connu comme prop on cherche dans le dico de désambiguation
+    if(this.disambiguiationDict.findIndex(p => p == name) !== -1) return true;
     return false;
   }
 
