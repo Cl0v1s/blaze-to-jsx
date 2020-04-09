@@ -5,7 +5,7 @@ import traverse from "@babel/traverse";
 import { NodePath } from '@babel/traverse';
 import generate from '@babel/generator';
 
-import { compile } from 'spacebars-to-jsx'
+import { compile } from '@synapse-medicine/spacebars-to-jsx'
 import Selector from './Selector';
 
 export default class Converter {

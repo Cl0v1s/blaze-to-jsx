@@ -1,6 +1,6 @@
 {
-  "name": "blaze-to-jsx",
-  "version": "1.0.0",
+  "name": "@synapse-medicine/blaze-to-jsx",
+  "version": "0.0.1",
   "description": "",
   "main": "dist/index.js",
   "scripts": {
@@ -31,10 +31,10 @@
     "@babel/generator": "^7.9.4",
     "@babel/parser": "^7.9.4",
     "@babel/traverse": "^7.9.0",
-    "@glimmer/syntax": "file:../glimmer-vm/dist/@glimmer/syntax",
+    "@synapse-medicine/spacebars-to-jsx": "0.0.1",
+    "@synapse-medicine/syntax": "^0.38.4",
     "@types/babel__traverse": "^7.0.10",
-    "scalpel": "^3.0.0",
-    "spacebars-to-jsx": "file:../spacebars-to-jsx"
+    "scalpel": "^3.0.0"
   },
   "publishConfig": {
     "@synapse-medicine:registry": "https://gitlab.com/api/v4/projects/7004367/packages/npm/"
