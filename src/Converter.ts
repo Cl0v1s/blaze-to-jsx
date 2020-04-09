@@ -15,7 +15,7 @@ export default class Converter {
   classDec: Babel.ClassDeclaration | null = null;
   globalIdentifiers: string[] = []
 
-  constructor(baseContent: string, component: Component, template: string, globalIdentifiers = []) {
+  constructor(baseContent: string, component: Component, template: Babel.Program, globalIdentifiers = []) {
     this.globalIdentifiers = globalIdentifiers;
     this.baseTree = Parser.parse(baseContent, {
       sourceType: 'module',
@@ -35,12 +35,13 @@ export default class Converter {
     this.clean();
 
     this.createRender(template);
-
-    this.generate();
   }
 
   generate() {
-    console.log(generate(this.baseTree, {}, undefined).code);
+    this.baseTree.program.body.push(
+      Babel.exportDefaultDeclaration((<Babel.ClassDeclaration>this.classDec).id)
+    );
+    return generate(this.baseTree, {}, undefined).code;
   }
 
   private findClassDeclaration() {
@@ -77,10 +78,12 @@ export default class Converter {
         if(this.isAFunction(id) == false) {
           if(this.globalIdentifiers.indexOf(id.name) !== -1) return;
           if(this.isAProp(id)) props.push(path); 
-          else console.warn("Ambiguous identifier in JSX: "+id.name);
+          else {
+            Babel.addComment(this.baseTree.program, "leading", " Ambiguous identifier in JSX: "+id.name+" ");
+            console.warn("Ambiguous identifier in JSX: "+id.name);
+          }
         } else {
           if(path.parent.type !== "CallExpression") return;
-          //console.log(path.findParent(e => e.type == "MemberExpression"));
           functions.push(path);
         }
       }
@@ -185,9 +188,8 @@ export default class Converter {
     });
   }
 
-  createRender(template: string) {
+  createRender(jsx: Babel.Program) {
     if(this.classDec == null) return;
-    const jsx: Babel.Program = <any>compile(template, {isJSX: true});
     this.replaceIdentifiers(jsx);
     this.bindEvents(jsx);
     this.createName(jsx);

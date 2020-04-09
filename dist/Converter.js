@@ -4,7 +4,6 @@ var Babel = require("@babel/types");
 var Parser = require("@babel/parser");
 var traverse_1 = require("@babel/traverse");
 var generator_1 = require("@babel/generator");
-var spacebars_to_jsx_1 = require("./../../spacebars-to-jsx");
 var Selector_1 = require("./Selector");
 var Converter = /** @class */ (function () {
     function Converter(baseContent, component, template, globalIdentifiers) {
@@ -26,10 +25,10 @@ var Converter = /** @class */ (function () {
         this.createFunctions();
         this.clean();
         this.createRender(template);
-        this.generate();
     }
     Converter.prototype.generate = function () {
-        console.log(generator_1.default(this.baseTree, {}, undefined).code);
+        this.baseTree.program.body.push(Babel.exportDefaultDeclaration(this.classDec.id));
+        return generator_1.default(this.baseTree, {}, undefined).code;
     };
     Converter.prototype.findClassDeclaration = function () {
         var _this = this;
@@ -71,13 +70,14 @@ var Converter = /** @class */ (function () {
                         return;
                     if (_this.isAProp(id))
                         props.push(path);
-                    else
+                    else {
+                        Babel.addComment(_this.baseTree.program, "leading", " Ambiguous identifier in JSX: " + id.name + " ");
                         console.warn("Ambiguous identifier in JSX: " + id.name);
+                    }
                 }
                 else {
                     if (path.parent.type !== "CallExpression")
                         return;
-                    //console.log(path.findParent(e => e.type == "MemberExpression"));
                     functions.push(path);
                 }
             }
@@ -150,10 +150,9 @@ var Converter = /** @class */ (function () {
             }
         });
     };
-    Converter.prototype.createRender = function (template) {
+    Converter.prototype.createRender = function (jsx) {
         if (this.classDec == null)
             return;
-        var jsx = spacebars_to_jsx_1.compile(template, { isJSX: true });
         this.replaceIdentifiers(jsx);
         this.bindEvents(jsx);
         this.createName(jsx);
