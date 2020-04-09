@@ -374,6 +374,7 @@ export default class Converter {
       Identifier: (p) => {
         const path: NodePath<Babel.Identifier> = p;
         const id: Babel.Identifier = path.node;
+        if(path.parent.type == "VariableDeclarator") return;
         if(id.name === "templateInstance") {
           path.replaceWith(<any>Babel.thisExpression());
         }

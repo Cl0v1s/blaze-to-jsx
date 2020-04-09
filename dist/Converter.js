@@ -282,6 +282,8 @@ var Converter = /** @class */ (function () {
             Identifier: function (p) {
                 var path = p;
                 var id = path.node;
+                if (path.parent.type == "VariableDeclarator")
+                    return;
                 if (id.name === "templateInstance") {
                     path.replaceWith(Babel.thisExpression());
                 }
