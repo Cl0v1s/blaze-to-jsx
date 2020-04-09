@@ -55,6 +55,23 @@ export default class Selector {
               literals = literals.filter(l => l.value.indexOf(selector.name) !== -1);
               return literals.length > 0;
             }
+            case 'idSelector': {
+              const clss: Babel.JSXAttribute = <any>element.openingElement.attributes.find((c: Babel.JSXAttribute | Babel.JSXSpreadAttribute) => {
+                return Babel.isJSXAttribute(c)
+                && Babel.isJSXIdentifier(c.name) 
+                && (<Babel.JSXIdentifier>c.name).name === "id";
+              });
+              if(clss == null || clss.value == null) return false;
+              let literals: Babel.StringLiteral[] = [];
+              traverse(<Babel.Node>clss.value, {
+                StringLiteral: (p) => {
+                  if(Babel.isNullLiteral(p.node)) return;
+                  literals.push(p.node)
+                },
+              }, path.scope, path.state);
+              literals = literals.filter(l => l.value.indexOf(selector.name) !== -1);
+              return literals.length > 0;
+            }
             default: {
               throw new Error(`Unknow selector `+JSON.stringify(selector));
             }

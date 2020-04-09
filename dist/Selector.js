@@ -53,6 +53,25 @@ var Selector = /** @class */ (function () {
                             literals_1 = literals_1.filter(function (l) { return l.value.indexOf(selector.name) !== -1; });
                             return literals_1.length > 0;
                         }
+                        case 'idSelector': {
+                            var clss = element.openingElement.attributes.find(function (c) {
+                                return Babel.isJSXAttribute(c)
+                                    && Babel.isJSXIdentifier(c.name)
+                                    && c.name.name === "id";
+                            });
+                            if (clss == null || clss.value == null)
+                                return false;
+                            var literals_2 = [];
+                            traverse_1.default(clss.value, {
+                                StringLiteral: function (p) {
+                                    if (Babel.isNullLiteral(p.node))
+                                        return;
+                                    literals_2.push(p.node);
+                                },
+                            }, path.scope, path.state);
+                            literals_2 = literals_2.filter(function (l) { return l.value.indexOf(selector.name) !== -1; });
+                            return literals_2.length > 0;
+                        }
                         default: {
                             throw new Error("Unknow selector " + JSON.stringify(selector));
                         }
