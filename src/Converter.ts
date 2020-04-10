@@ -87,7 +87,8 @@ export default class Converter {
             console.warn("Ambiguous identifier in JSX: "+id.name);
           }
         } else {
-          if(path.parent.type !== "CallExpression") return;
+          const parent = path.parent;
+          if(parent.type === "MemberExpression" && parent.property == path.node) return;
           functions.push(path);
         }
       }

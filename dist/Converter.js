@@ -82,7 +82,8 @@ var Converter = /** @class */ (function () {
                     }
                 }
                 else {
-                    if (path.parent.type !== "CallExpression")
+                    var parent_1 = path.parent;
+                    if (parent_1.type === "MemberExpression" && parent_1.property == path.node)
                         return;
                     functions.push(path);
                 }
