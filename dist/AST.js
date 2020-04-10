@@ -126,6 +126,9 @@ var AST = /** @class */ (function () {
                 if (Babel.isIdentifier(expr.expression.callee.property) == false)
                     return;
                 var cycle = expr.expression.callee.property;
+                if ((cycle.name == "onCreated" || cycle.name == "onRendered" || cycle.name == "onDestroyed")
+                    && Babel.isFunctionDeclaration(expr.expression.arguments[0]) == false)
+                    throw new Error('LifeCycle functions can only be FunctionDeclaration. Aborting.');
                 if (cycle.name == "onCreated")
                     _this.component.constructr = expr.expression.arguments[0];
                 else if (cycle.name == "onRendered")
