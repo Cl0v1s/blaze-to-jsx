@@ -80,6 +80,15 @@ export default class Selector {
               literals = literals.filter(l => (<any>l).value.toString().indexOf(selector.name) !== -1);
               return literals.length > 0;
             }
+            case "attributePresenceSelector": {
+              const attr: Babel.JSXAttribute = <any>element.openingElement.attributes.find((c: Babel.JSXAttribute | Babel.JSXSpreadAttribute) => {
+                  return Babel.isJSXAttribute(c)
+                      && Babel.isJSXIdentifier(c.name)
+                      && (<Babel.JSXIdentifier>c.name).name === selector.name;
+              });
+              if (attr == null) return false;
+              return true;
+            }
             case "attributeValueSelector": {
               //console.warn("Usage of attributeValueSelector: this selector is usually useful at runtime. Please check the Event Binders are correctly created on "+JSON.stringify(this.selector));
               const attr: Babel.JSXAttribute = <any>element.openingElement.attributes.find((c: Babel.JSXAttribute | Babel.JSXSpreadAttribute) => {

@@ -82,6 +82,16 @@ var Selector = /** @class */ (function () {
                             literals_2 = literals_2.filter(function (l) { return l.value.toString().indexOf(selector.name) !== -1; });
                             return literals_2.length > 0;
                         }
+                        case "attributePresenceSelector": {
+                            var attr = element.openingElement.attributes.find(function (c) {
+                                return Babel.isJSXAttribute(c)
+                                    && Babel.isJSXIdentifier(c.name)
+                                    && c.name.name === selector.name;
+                            });
+                            if (attr == null)
+                                return false;
+                            return true;
+                        }
                         case "attributeValueSelector": {
                             //console.warn("Usage of attributeValueSelector: this selector is usually useful at runtime. Please check the Event Binders are correctly created on "+JSON.stringify(this.selector));
                             var attr = element.openingElement.attributes.find(function (c) {
