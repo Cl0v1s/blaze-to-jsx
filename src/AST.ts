@@ -146,11 +146,12 @@ export default class AST {
         if(Babel.isMemberExpression(expr.expression.callee.object) == false) return;
         if(Babel.isIdentifier(expr.expression.callee.property) == false) return;
         const cycle: Babel.Identifier = expr.expression.callee.property;
-        
-        if(
+
+        if (
           (cycle.name == "onCreated" || cycle.name == "onRendered" || cycle.name == "onDestroyed")
-          && Babel.isFunctionDeclaration(expr.expression.arguments[0]) == false
-        ) throw new Error('LifeCycle functions can only be FunctionDeclaration. Aborting.');
+          && Babel.isIdentifier(expr.expression.arguments[0])
+        )
+        throw new Error('LifeCycle functions can not be Identifier. Aborting.');
 
         if(cycle.name == "onCreated") this.component.constructr = expr.expression.arguments[0];
         else if(cycle.name == "onRendered") this.component.didMount = expr.expression.arguments[0];
