@@ -156,6 +156,8 @@ var Converter = /** @class */ (function () {
                 attr = attr[0];
                 var name = attr.value.value;
                 name = name.replace(/(?:^|\s)\S/g, function (a) { return a.toUpperCase(); });
+                if (_this.classDec.id.name !== "__MyComponent")
+                    throw new Error('Trying to convert file with multiple components. Aborting.');
                 _this.classDec.id = Babel.identifier(name);
                 element.name = Babel.jsxIdentifier('div');
                 p.parentPath.node.closingElement.name = Babel.jsxIdentifier('div');
@@ -291,6 +293,11 @@ var Converter = /** @class */ (function () {
                 if (path.parent.type == "VariableDeclarator")
                     return;
                 if (id.name === "templateInstance") {
+                    // Dans le cas on a une fonction qui se nomme templateInstance
+                    // On se retrouve avec this.templateInstance = this.templateInstance.bind(this)
+                    // On ne modifie pas ce templateInstance dans ce cas
+                    if (path.parent.type === "MemberExpression" && path.parent.object.type === "ThisExpression")
+                        return;
                     path.replaceWith(Babel.thisExpression());
                 }
             },

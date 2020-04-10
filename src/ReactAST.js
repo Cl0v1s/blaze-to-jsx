@@ -1,5 +1,5 @@
 import React, { Component } from 'react';
 
-class MyComponent extends Component {
+class __MyComponent extends Component {
     
 }
