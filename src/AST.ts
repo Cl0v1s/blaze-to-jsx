@@ -64,6 +64,7 @@ export default class AST {
             || (Babel.isIdentifier(subject.object) && (<Babel.Identifier>subject.object).name === 'templateInstance')
             || (
               Babel.isCallExpression(subject.object) 
+              && Babel.isMemberExpression(subject.object.callee)
               && (<Babel.Identifier>(<Babel.MemberExpression>(<Babel.CallExpression>subject.object).callee).object).name === 'Template'
               && (<Babel.Identifier>(<Babel.MemberExpression>(<Babel.CallExpression>subject.object).callee).property).name === 'instance'
             )
@@ -110,6 +111,7 @@ export default class AST {
               || (Babel.isIdentifier(subject.object) && (<Babel.Identifier>subject.object).name === 'templateInstance')
               || (
                 Babel.isCallExpression(subject.object) 
+                && Babel.isMemberExpression(subject.object.callee)
                 && (<Babel.Identifier>(<Babel.MemberExpression>(<Babel.CallExpression>subject.object).callee).object).name === 'Template'
                 && (<Babel.Identifier>(<Babel.MemberExpression>(<Babel.CallExpression>subject.object).callee).property).name === 'instance'
               )

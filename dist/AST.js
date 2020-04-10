@@ -48,6 +48,7 @@ var AST = /** @class */ (function () {
                 if ((Babel.isThisExpression(subject.object)
                     || (Babel.isIdentifier(subject.object) && subject.object.name === 'templateInstance')
                     || (Babel.isCallExpression(subject.object)
+                        && Babel.isMemberExpression(subject.object.callee)
                         && subject.object.callee.object.name === 'Template'
                         && subject.object.callee.property.name === 'instance')) == false)
                     return;
@@ -86,6 +87,7 @@ var AST = /** @class */ (function () {
                 if ((Babel.isThisExpression(subject.object)
                     || (Babel.isIdentifier(subject.object) && subject.object.name === 'templateInstance')
                     || (Babel.isCallExpression(subject.object)
+                        && Babel.isMemberExpression(subject.object.callee)
                         && subject.object.callee.object.name === 'Template'
                         && subject.object.callee.property.name === 'instance')) == false)
                     return;
